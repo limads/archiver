@@ -49,7 +49,7 @@ pub struct SaveDialog {
 
 impl SaveDialog {
 
-    pub fn build() -> Self {
+    pub fn build(pattern : &str) -> Self {
         let dialog = FileChooserDialog::new(
             Some("Save file"),
             None::<&Window>,
@@ -67,7 +67,7 @@ impl SaveDialog {
         });
         configure_dialog(&dialog);
         let filter = FileFilter::new();
-        filter.add_pattern("*.tex");
+        filter.add_pattern(pattern);
         dialog.set_filter(&filter);
         Self { dialog }
     }

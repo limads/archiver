@@ -12,6 +12,8 @@ use stateful::Callbacks;
 use stateful::ValuedCallbacks;
 use super::{OpenDialog, SaveDialog};
 use crate::FileActions;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(Clone, Copy)]
 pub enum FileState {
@@ -104,6 +106,7 @@ pub trait SingleArchiverImpl : AsRef<SingleArchiver> {
         self.as_ref().on_buffer_read_request.bind(f);
     }
 
+    // This is the first save of a new file. Perhaps rename to "save new"
     fn connect_save_unknown_path<F>(&self, f : F)
     where
         F : Fn(String)->() + 'static
@@ -571,4 +574,36 @@ pub fn connect_manager_with_file_actions(
     });
 }
 
+pub fn connect_manager_to_editor<A>(
+    manager : &A,
+    view : &sourceview5::View,
+    buf_change_handler : &Rc<RefCell<Option<SignalHandlerId>>>
+)
+where
+    A : AsRef<SingleArchiver> + SingleArchiverImpl
+{
+    manager.connect_opened({
+        let view = view.clone();
+        let change_handler = buf_change_handler.clone();
+        move |(path, content)| {
+            println!("Text set");
+            let handler_guard = change_handler.borrow();
+            let change_handler = handler_guard.as_ref().unwrap();
+            view.buffer().block_signal(&change_handler);
+            view.buffer().set_text(&content);
+            view.buffer().unblock_signal(&change_handler);
+        }
+    });
+    manager.connect_buffer_read_request({
+        let view = view.clone();
+        move |_| -> String {
+            let buffer = view.buffer();
+            buffer.text(
+                &buffer.start_iter(),
+                &buffer.end_iter(),
+                true
+            ).to_string()
+        }
+    });
+}
 
