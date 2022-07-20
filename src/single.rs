@@ -23,6 +23,7 @@ pub enum FileState {
     CloseWindow
 }
 
+#[derive(Debug)]
 pub enum SingleArchiverAction {
 
     // Whether to force or not
@@ -227,7 +228,12 @@ impl SingleArchiver {
             let mut curr_file : CurrentFile = Default::default();
             curr_file.reset();
 
+            let mut ix = 0;
             move |action| {
+
+                println!("{}: {:?}", ix, action);
+                ix += 1;
+
                 match action {
 
                     // To be triggered when "new" action is activated on the main menu.
