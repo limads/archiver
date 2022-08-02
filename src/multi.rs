@@ -17,7 +17,7 @@ use stateful::{Callbacks, ValuedCallbacks};
 
 pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
 
-    fn final_state(&self) -> Rc<RefCell<Vec<OpenedFile>>> {
+    fn final_state(&self) -> Rc<RefCell<FinalState>> {
         self.as_ref().final_state.clone()
     }
 
@@ -131,6 +131,12 @@ pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
 
 }
 
+#[derive(Debug, Clone)]
+pub struct FinalState {
+    pub recent : Vec<OpenedFile>,
+    pub files : Vec<OpenedFile>
+}
+
 pub enum MultiArchiverAction {
 
     OpenRequest(String),
@@ -173,7 +179,7 @@ pub enum MultiArchiverAction {
 
 pub struct MultiArchiver {
 
-    final_state : Rc<RefCell<Vec<OpenedFile>>>,
+    final_state : Rc<RefCell<FinalState>>,
 
     send : glib::Sender<MultiArchiverAction>,
 
@@ -215,8 +221,16 @@ const MAX_FILE_SIZE : usize = 5_000_000;
 
 impl MultiArchiver {
 
+    pub fn final_state(&self) -> FinalState {
+        self.final_state.borrow().clone()
+    }
+
+    pub fn sender(&self) -> &glib::Sender<MultiArchiverAction> {
+        &self.send
+    }
+
     pub fn new() -> Self {
-        let final_state = Rc::new(RefCell::new(Vec::new()));
+        let final_state = Rc::new(RefCell::new(FinalState { recent : Vec::new(), files : Vec::new() }));
         let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::PRIORITY_DEFAULT);
         let on_open : Callbacks<OpenedFile> = Default::default();
         let on_new : Callbacks<OpenedFile> = Default::default();
@@ -234,7 +248,7 @@ impl MultiArchiver {
         let on_error : Callbacks<String> = Default::default();
         let on_added : Callbacks<OpenedFile> = Default::default();
 
-        // Holds the files opened at the editor the user seeds on the side panel
+        // Holds the files opened at the editor the user sees on the side panel
         let mut files : Vec<OpenedFile> = Vec::new();
 
         // Holds the files shown on the recent script list before the editor is opened. The files
@@ -349,7 +363,7 @@ impl MultiArchiver {
                                 on_close_confirm.call(files[ix].clone());
                             }
                         }
-                        final_state.replace(recent_files.clone());
+                        final_state.replace(FinalState { recent : recent_files.clone(), files : files.clone() });
                     },
                     MultiArchiverAction::SaveRequest(opt_path) => {
                         if let Some(ix) = selected {
@@ -424,7 +438,7 @@ impl MultiArchiver {
                         } else {
                             on_window_close.call(());
                         }
-                        final_state.replace(recent_files.clone());
+                        final_state.replace(FinalState { recent : recent_files.clone(), files : files.clone() });
                     },
                     // MultiArchiverAction::CloseConfirm(_) | MultiArchiverAction::Opened(_) | MultiArchiverAction::Closed(_) => {
                     //}
