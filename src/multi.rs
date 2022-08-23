@@ -38,6 +38,16 @@ pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
         self.as_ref().on_new.bind(f);
     }
 
+    // When the user requested to open a file that was already opened. Gives
+    // the client a chance to do someting, such as making the file view receive
+    // the focs.
+    fn connect_reopen<F>(&self, f : F)
+    where
+        F : Fn(OpenedFile) + 'static
+    {
+        self.as_ref().on_reopen.bind(f);
+    }
+
     fn connect_added<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
@@ -61,7 +71,7 @@ pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
 
     fn connect_closed<F>(&self, f : F)
     where
-        F : Fn((usize, usize)) + 'static
+        F : Fn((OpenedFile, usize)) + 'static
     {
         self.as_ref().on_file_closed.bind(f);
     }
@@ -137,6 +147,7 @@ pub struct FinalState {
     pub files : Vec<OpenedFile>
 }
 
+#[derive(Debug, Clone)]
 pub enum MultiArchiverAction {
 
     OpenRequest(String),
@@ -189,6 +200,8 @@ pub struct MultiArchiver {
 
     on_save : Callbacks<OpenedFile>,
 
+    on_reopen : Callbacks<OpenedFile>,
+
     on_save_unknown_path : Callbacks<String>,
 
     on_file_changed : Callbacks<OpenedFile>,
@@ -197,9 +210,11 @@ pub struct MultiArchiver {
 
     on_active_text_changed : Callbacks<Option<String>>,
 
+    // When user clicks new action
     on_new : Callbacks<OpenedFile>,
 
-    on_file_closed : Callbacks<(usize, usize)>,
+    // Contains the index of the old closed file and the number of remaining files.
+    on_file_closed : Callbacks<(OpenedFile, usize)>,
 
     on_close_confirm : Callbacks<OpenedFile>,
 
@@ -209,8 +224,10 @@ pub struct MultiArchiver {
 
     on_selected : Callbacks<Option<OpenedFile>>,
 
+    // Called when file goes from untitled to having a name.
     on_name_changed : Callbacks<(usize, String)>,
 
+    // When the user state is being updated
     on_added : Callbacks<OpenedFile>
 
 }
@@ -229,7 +246,7 @@ impl MultiArchiver {
         &self.send
     }
 
-    pub fn new() -> Self {
+    pub fn new(extension : String) -> Self {
         let final_state = Rc::new(RefCell::new(FinalState { recent : Vec::new(), files : Vec::new() }));
         let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::PRIORITY_DEFAULT);
         let on_open : Callbacks<OpenedFile> = Default::default();
@@ -237,8 +254,9 @@ impl MultiArchiver {
         let on_save : Callbacks<OpenedFile> = Default::default();
         let on_file_changed : Callbacks<OpenedFile> = Default::default();
         let on_file_persisted : Callbacks<OpenedFile> = Default::default();
+        let on_reopen : Callbacks<OpenedFile> = Default::default();
         let on_selected : Callbacks<Option<OpenedFile>> = Default::default();
-        let on_file_closed : Callbacks<(usize, usize)> = Default::default();
+        let on_file_closed : Callbacks<(OpenedFile, usize)> = Default::default();
         let on_active_text_changed : Callbacks<Option<String>> = Default::default();
         let on_close_confirm : Callbacks<OpenedFile> = Default::default();
         let on_window_close : Callbacks<()> = Default::default();
@@ -262,7 +280,7 @@ impl MultiArchiver {
         let mut win_close_request = false;
         recv.attach(None, {
             let send = send.clone();
-            let (on_open, on_new, on_save, on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted) = (
+            let (on_open, on_new, on_save, on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted, on_reopen) = (
                 on_open.clone(),
                 on_new.clone(),
                 on_save.clone(),
@@ -270,7 +288,8 @@ impl MultiArchiver {
                 on_file_closed.clone(),
                 on_close_confirm.clone(),
                 on_file_changed.clone(),
-                on_file_persisted.clone()
+                on_file_persisted.clone(),
+                on_reopen.clone()
             );
             let (_on_active_text_changed, on_window_close, on_buffer_read_request, on_save_unknown_path) = (
                 on_active_text_changed.clone(),
@@ -288,8 +307,13 @@ impl MultiArchiver {
 
             move |action| {
 
+                // println!("{:?}", action);
+                // println!("{:?}", files);
+
                 // println!("Current files = {:?}", files);
                 match action {
+
+                    // When user clicks "new file"
                     MultiArchiverAction::NewRequest => {
                         if files.len() == 16 {
                             send.send(MultiArchiverAction::OpenError(format!("Maximum number of files opened"))).unwrap();
@@ -297,11 +321,11 @@ impl MultiArchiver {
                         }
                         let n_untitled = files.iter().filter(|f| f.name.starts_with("Untitled") )
                             .last()
-                            .map(|f| f.name.split(" ").nth(1).unwrap().trim_end_matches(".sql").parse::<usize>().unwrap() )
+                            .map(|f| f.name.split(" ").nth(1).unwrap().trim_end_matches(&format!(".{}", extension)).parse::<usize>().unwrap() )
                             .unwrap_or(0);
                         let new_file = OpenedFile {
                             path : None,
-                            name : format!("Untitled {}.sql", n_untitled + 1),
+                            name : format!("Untitled {}.{}", n_untitled + 1, extension),
                             saved : true,
                             content : None,
                             index : files.len(),
@@ -310,19 +334,24 @@ impl MultiArchiver {
                         files.push(new_file.clone());
                         on_new.call(new_file);
                     },
+
+                    // When the user state is being updated
                     MultiArchiverAction::Add(file) => {
                         recent_files.push(file.clone());
                         on_added.call(file);
                     },
                     MultiArchiverAction::OpenRequest(path) => {
-                        if files.len() == 16 {
-                            send.send(MultiArchiverAction::OpenError(format!("File list limit reached"))).unwrap();
+
+                        println!("{:?}", files);
+                        if let Some(already_opened) = files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ) {
+
+                            // send.send(MultiArchiverAction::OpenError(format!("File already opened"))).unwrap();
+                            on_reopen.call(already_opened.clone());
                             return glib::source::Continue(true);
                         }
 
-                        println!("{:?}", files);
-                        if files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ).is_some() {
-                            send.send(MultiArchiverAction::OpenError(format!("File already opened"))).unwrap();
+                        if files.len() == 16 {
+                            send.send(MultiArchiverAction::OpenError(format!("File list limit reached"))).unwrap();
                             return glib::source::Continue(true);
                         }
 
@@ -346,9 +375,11 @@ impl MultiArchiver {
                         // the action originated from a application window close. If win_close_request=false,
                         // the action originated from a file list item close.
                         if force {
-                            last_closed_file = Some(remove_file(&mut files, ix));
+                            let closed_file = remove_file(&mut files, ix);
+                            assert!(closed_file.index == ix);
+                            last_closed_file = Some(closed_file.clone());
                             let n = files.len();
-                            on_file_closed.call((ix, n));
+                            on_file_closed.call((closed_file, n));
                             println!("File closed");
                             if win_close_request {
                                 on_window_close.call(());
@@ -356,9 +387,11 @@ impl MultiArchiver {
                             }
                         } else {
                             if files[ix].saved {
-                                last_closed_file = Some(remove_file(&mut files, ix));
+                                let closed_file = remove_file(&mut files, ix);
+                                assert!(closed_file.index == ix);
+                                last_closed_file = Some(closed_file.clone());
                                 let n = files.len();
-                                on_file_closed.call((ix, n));
+                                on_file_closed.call((closed_file, n));
                             } else {
                                 on_close_confirm.call(files[ix].clone());
                             }
@@ -486,6 +519,7 @@ impl MultiArchiver {
             on_name_changed,
             on_error,
             on_added,
+            on_reopen,
             final_state
         }
     }
@@ -584,7 +618,7 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
                 send.send(MultiArchiverAction::OpenSuccess(new_file)).unwrap();
             },
             Err(e) => {
-                send.send(MultiArchiverAction::OpenError(format!("{}", e ))).unwrap();
+                send.send(MultiArchiverAction::OpenError(format!("{}", e))).unwrap();
             }
         }
     })

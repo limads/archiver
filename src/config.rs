@@ -25,10 +25,9 @@ pub fn set_paned_on_close(primary : &Paned, secondary : &Paned, state : &mut Pan
 }
 
 pub fn set_win_dims_on_close(win : &ApplicationWindow, state : &mut WindowState) {
-    state.width = win.allocation().width;
-    state.height = win.allocation().height;
+    state.width = win.allocation().width();
+    state.height = win.allocation().height();
 }
-
 
 pub fn load_shared_serializable<T : DeserializeOwned>(path : &str) -> Option<Rc<RefCell<T>>> {
     let state : T = serde_json::from_reader(File::open(path).ok()?).ok()?;
