@@ -14,6 +14,7 @@ use super::{OpenDialog, SaveDialog};
 use crate::FileActions;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
 pub enum FileState {
@@ -226,6 +227,8 @@ impl SingleArchiver {
 
             // Holds optional path and whether the file is saved.
             let mut curr_file : CurrentFile = Default::default();
+            let mut file_open_handle : Option<JoinHandle<bool>> = None;
+            let mut file_save_handle : Option<JoinHandle<bool>> = None;
             curr_file.reset();
 
             let mut ix = 0;
@@ -255,11 +258,17 @@ impl SingleArchiver {
                     SingleArchiverAction::SaveRequest(opt_path) => {
                         if let Some(path) = opt_path {
                             let content = on_buffer_read_request.call_with_values(()).remove(0);
-                            spawn_save_file(path, content, send.clone());
+                            if let Some(handle) = file_save_handle.take() {
+                                handle.join().unwrap();
+                            }
+                            file_save_handle = Some(spawn_save_file(path, content, send.clone()));
                         } else {
                             if let Some(path) = curr_file.path.clone() {
                                 let content = on_buffer_read_request.call_with_values(()).remove(0);
-                                spawn_save_file(path, content, send.clone());
+                                if let Some(handle) = file_save_handle.take() {
+                                    handle.join().unwrap();
+                                }
+                                file_save_handle = Some(spawn_save_file(path, content, send.clone()));
                             } else {
                                 on_save_unknown_path.call(String::new());
                             }
@@ -281,10 +290,13 @@ impl SingleArchiver {
                             // println!("(File changed) Just opened set to false");
                         }
 
+                        if curr_file.last_saved.is_some() {
+                            curr_file.last_saved = None;
+                            on_file_changed.call(curr_file.path.clone());
+                        }
+
                         //else {
-                        curr_file.last_saved = None;
                         // println!("File changed by key press");
-                        on_file_changed.call(curr_file.path.clone());
                         //}
                     },
                     SingleArchiverAction::SaveSuccess(path) => {
@@ -312,8 +324,11 @@ impl SingleArchiver {
                                 return Continue(true);
                             }
                         }
-
-                        spawn_open_file(path, send.clone());
+    
+                        if let Some(handle) = file_open_handle.take() {
+                            handle.join().unwrap();
+                        }
+                        file_open_handle = Some(spawn_open_file(path, send.clone()));
 
                         // Just opened should be set here (before the confirmation of the open thread)
                         // because the on_open
@@ -392,6 +407,12 @@ impl SingleArchiver {
 /// be sent back to the main thread via the send glib channel.
 pub fn spawn_open_file(path : String, send : glib::Sender<SingleArchiverAction>) -> JoinHandle<bool> {
     thread::spawn(move || {
+    
+        if !Path::new(&path[..]).is_absolute() {
+            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")));
+            return false;
+        }
+        
         match File::open(&path) {
             Ok(mut f) => {
                 let mut content = String::new();
@@ -426,6 +447,12 @@ pub fn spawn_save_file(
     send : glib::Sender<SingleArchiverAction>
 ) -> JoinHandle<bool> {
     thread::spawn(move || {
+
+        if !Path::new(&path[..]).is_absolute() {
+            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")));
+            return false;
+        }
+
         match File::create(&path) {
             Ok(mut f) => {
                 match f.write_all(content.as_bytes()) {
@@ -551,7 +578,6 @@ where
         }
     });
 }
-
 
 pub fn connect_manager_with_file_actions(
     // manager : &FileManager,

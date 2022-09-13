@@ -2,7 +2,7 @@ use std::boxed;
 use std::thread;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use notify::{self, Watcher};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -151,6 +151,8 @@ pub struct FinalState {
 pub enum MultiArchiverAction {
 
     OpenRequest(String),
+    
+    SetPrefix(Option<String>),
 
     OpenSuccess(OpenedFile),
 
@@ -300,10 +302,16 @@ impl MultiArchiver {
             let on_added = on_added.clone();
             let on_name_changed = on_name_changed.clone();
             let on_error = on_error.clone();
-            let mut file_open_handle : Option<JoinHandle<()>> = None;
+            let mut file_open_handle : Option<JoinHandle<bool>> = None;
+            let mut file_save_handle : Option<JoinHandle<bool>> = None;
 
             let mut last_closed_file : Option<OpenedFile> = None;
             let final_state = final_state.clone();
+            
+            // If set, any file operations are only done if the path satisfies
+            // this prefix (e.g. multiarchiver does not touch anything outside
+            // /home/user/myproject if prefix is set to this value.
+            let mut prefix : Option<String> = None;
 
             move |action| {
 
@@ -342,6 +350,13 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::OpenRequest(path) => {
 
+                        if let Some(pr) = &prefix {
+                            if !path.starts_with(pr) {
+                                send.send(MultiArchiverAction::OpenError(format!("Cannot open file outside prefix {}", pr))).unwrap();
+                                return glib::source::Continue(true);
+                            }
+                        }
+                        
                         println!("{:?}", files);
                         if let Some(already_opened) = files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ) {
 
@@ -365,8 +380,7 @@ impl MultiArchiver {
                             handle.join().unwrap();
                         }
 
-                        let handle = spawn_open_file(send.clone(), path, files.len());
-                        file_open_handle = Some(handle);
+                        file_open_handle = Some(spawn_open_file(send.clone(), path, files.len()));
                     },
                     MultiArchiverAction::CloseRequest(ix, force) => {
 
@@ -401,12 +415,34 @@ impl MultiArchiver {
                     MultiArchiverAction::SaveRequest(opt_path) => {
                         if let Some(ix) = selected {
                             if let Some(path) = opt_path {
+                            
+                                if let Some(pr) = &prefix {
+                                    if !path.starts_with(pr) {
+                                        send.send(MultiArchiverAction::OpenError(format!("Cannot save file outside prefix {}", pr))).unwrap();
+                                        return glib::source::Continue(true);
+                                    }
+                                }
+                                
                                 let content = on_buffer_read_request.call_with_values(ix).remove(0);
-                                spawn_save_file(path, ix, content, send.clone());
+                                if let Some(handle) = file_save_handle.take() {
+                                    handle.join().unwrap();
+                                }
+                                file_save_handle = Some(spawn_save_file(path, ix, content, send.clone()));
                             } else {
                                 if let Some(path) = files[ix].path.clone() {
+                                
+                                    if let Some(pr) = &prefix {
+                                        if !path.starts_with(pr) {
+                                            send.send(MultiArchiverAction::OpenError(format!("Cannot save file outside prefix {}", pr))).unwrap();
+                                            return glib::source::Continue(true);
+                                        }
+                                    }
+                                    
                                     let content = on_buffer_read_request.call_with_values(ix).remove(0);
-                                    spawn_save_file(path, ix, content, send.clone());
+                                    if let Some(handle) = file_save_handle.take() {
+                                        handle.join().unwrap();
+                                    }
+                                    file_save_handle = Some(spawn_save_file(path, ix, content, send.clone()));
                                 } else {
                                     on_save_unknown_path.call(files[ix].name.clone());
                                 }
@@ -432,6 +468,8 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::SetSaved(ix, saved) => {
 
+                        println!("Setting {} to saved status = {}", ix, saved);
+
                         // SetSaved will be called when a buffer is cleared after a file is closed,
                         // so we just ignore the call in this case, since the file won't be at the
                         // buffer anymore (impl React<QueriesEditor> for MultiArchiver).
@@ -440,11 +478,14 @@ impl MultiArchiver {
                             return glib::source::Continue(true);
                         }
 
-                        files[ix].saved = saved;
                         if saved {
+                            files[ix].saved = true;
                             on_file_persisted.call(files[ix].clone());
                         } else {
-                            on_file_changed.call(files[ix].clone());
+                            if files[ix].saved {
+                                files[ix].saved = false;
+                                on_file_changed.call(files[ix].clone());
+                            }
                         }
                     },
                     MultiArchiverAction::OpenSuccess(file) => {
@@ -459,6 +500,9 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::OpenError(msg) => {
                         on_error.call(msg.clone());
+                    },
+                    MultiArchiverAction::SetPrefix(opt_path) => {
+                        prefix = opt_path;
                     },
                     MultiArchiverAction::Select(opt_ix) => {
                         selected = opt_ix;
@@ -572,6 +616,12 @@ fn spawn_save_file(
     send : glib::Sender<MultiArchiverAction>
 ) -> JoinHandle<bool> {
     thread::spawn(move || {
+    
+        if !Path::new(&path[..]).is_absolute() {
+            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")));
+            return false;
+        }
+        
         match File::create(&path) {
             Ok(mut f) => {
                 match f.write_all(content.as_bytes()) {
@@ -593,8 +643,14 @@ fn spawn_save_file(
     })
 }
 
-fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_files : usize) -> JoinHandle<()> {
+fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_files : usize) -> JoinHandle<bool> {
     thread::spawn(move || {
+    
+        if !Path::new(&path[..]).is_absolute() {
+            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")));
+            return false;
+        }
+        
         match File::open(&path) {
             Ok(mut f) => {
                 let mut content = String::new();
@@ -604,7 +660,7 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
 
                 if content.len() > MAX_FILE_SIZE {
                     send.send(MultiArchiverAction::OpenError(format!("File extrapolates maximum size"))).unwrap();
-                    return;
+                    return false;
                 }
 
                 let new_file = OpenedFile {
@@ -616,9 +672,11 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
                     dt : Local::now().to_string()
                 };
                 send.send(MultiArchiverAction::OpenSuccess(new_file)).unwrap();
+                true
             },
             Err(e) => {
                 send.send(MultiArchiverAction::OpenError(format!("{}", e))).unwrap();
+                false
             }
         }
     })
