@@ -40,3 +40,8 @@ mod config;
 
 pub use config::*;
 
+pub fn log_err<E : std::error::Error>(err : E) {
+    eprintln!("{}", err);
+}
+
+

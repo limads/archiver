@@ -5,7 +5,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::thread;
 use std::fs::File;
-use std::io::Read;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct WindowState {

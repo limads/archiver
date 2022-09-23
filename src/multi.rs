@@ -1,11 +1,11 @@
-use std::boxed;
+
 use std::thread;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use notify::{self, Watcher};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::path::{Path};
+// use notify::{self, Watcher};
+
+
 use std::thread::JoinHandle;
 use serde::{Serialize, Deserialize};
 use chrono::prelude::*;
@@ -23,7 +23,8 @@ pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
 
     fn add_files(&self, files : &[OpenedFile]) {
         for f in files.iter() {
-            self.as_ref().send.send(MultiArchiverAction::Add(f.clone()));
+            self.as_ref().send.send(MultiArchiverAction::Add(f.clone()))
+                .unwrap_or_else(super::log_err);
         }
     }
 
@@ -200,7 +201,7 @@ pub struct MultiArchiver {
 
     on_error : Callbacks<String>,
 
-    on_save : Callbacks<OpenedFile>,
+    // on_save : Callbacks<OpenedFile>,
 
     on_reopen : Callbacks<OpenedFile>,
 
@@ -253,7 +254,7 @@ impl MultiArchiver {
         let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::PRIORITY_DEFAULT);
         let on_open : Callbacks<OpenedFile> = Default::default();
         let on_new : Callbacks<OpenedFile> = Default::default();
-        let on_save : Callbacks<OpenedFile> = Default::default();
+        // let on_save : Callbacks<OpenedFile> = Default::default();
         let on_file_changed : Callbacks<OpenedFile> = Default::default();
         let on_file_persisted : Callbacks<OpenedFile> = Default::default();
         let on_reopen : Callbacks<OpenedFile> = Default::default();
@@ -282,10 +283,10 @@ impl MultiArchiver {
         let mut win_close_request = false;
         recv.attach(None, {
             let send = send.clone();
-            let (on_open, on_new, on_save, on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted, on_reopen) = (
+            let (on_open, on_new, /*_on_save,*/ on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted, on_reopen) = (
                 on_open.clone(),
                 on_new.clone(),
-                on_save.clone(),
+                // on_save.clone(),
                 on_selected.clone(),
                 on_file_closed.clone(),
                 on_close_confirm.clone(),
@@ -461,7 +462,8 @@ impl MultiArchiver {
                                 recent_files.push(files[ix].clone());
                             }
                         }
-                        send.send(MultiArchiverAction::SetSaved(ix, true));
+                        send.send(MultiArchiverAction::SetSaved(ix, true))
+                            .unwrap_or_else(super::log_err);
                     },
                     MultiArchiverAction::SaveError(e) => {
                         on_error.call(e);
@@ -492,7 +494,8 @@ impl MultiArchiver {
                         files.push(file.clone());
                         // println!("Files after opening = {:?}", files);
                         on_open.call(file.clone());
-                        send.send(MultiArchiverAction::SetSaved(file.index, true));
+                        send.send(MultiArchiverAction::SetSaved(file.index, true))
+                            .unwrap_or_else(super::log_err);
 
                         if recent_files.iter().find(|f| &f.path.as_ref().unwrap()[..] == &file.path.as_ref().unwrap()[..] ).is_none() {
                             recent_files.push(file.clone());
@@ -548,7 +551,7 @@ impl MultiArchiver {
         });*/
         Self {
             on_open,
-            on_save,
+            // on_save,
             on_new,
             send,
             on_selected,
@@ -618,12 +621,14 @@ fn spawn_save_file(
     thread::spawn(move || {
     
         if !Path::new(&path[..]).is_absolute() {
-            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")));
+            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
         
         if Path::new(&path[..]).is_dir() {
-            send.send(MultiArchiverAction::SaveError(String::from("Tried to save file to directory path")));
+            send.send(MultiArchiverAction::SaveError(String::from("Tried to save file to directory path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
         
@@ -631,17 +636,20 @@ fn spawn_save_file(
             Ok(mut f) => {
                 match f.write_all(content.as_bytes()) {
                     Ok(_) => {
-                        send.send(MultiArchiverAction::SaveSuccess(index, path));
+                        send.send(MultiArchiverAction::SaveSuccess(index, path))
+                            .unwrap_or_else(super::log_err);
                         true
                     },
                     Err(e) => {
-                        send.send(MultiArchiverAction::SaveError(format!("{}", e)));
+                        send.send(MultiArchiverAction::SaveError(format!("{}", e)))
+                            .unwrap_or_else(super::log_err);
                         false
                     }
                 }
             },
             Err(e) => {
-                send.send(MultiArchiverAction::SaveError(format!("{}", e)));
+                send.send(MultiArchiverAction::SaveError(format!("{}", e)))
+                    .unwrap_or_else(super::log_err);
                 false
             }
         }
@@ -652,7 +660,8 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
     thread::spawn(move || {
     
         if !Path::new(&path[..]).is_absolute() {
-            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")));
+            send.send(MultiArchiverAction::SaveError(String::from("Using non-absolute path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
         
@@ -660,7 +669,8 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
             Ok(mut f) => {
                 let mut content = String::new();
                 if let Err(e) = f.read_to_string(&mut content) {
-                    send.send(MultiArchiverAction::OpenError(format!("{}", e)));
+                    send.send(MultiArchiverAction::OpenError(format!("{}", e)))
+                        .unwrap_or_else(super::log_err);
                 }
 
                 if content.len() > MAX_FILE_SIZE {

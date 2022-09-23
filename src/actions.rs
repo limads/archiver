@@ -1,5 +1,4 @@
 use gtk4::*;
-use gtk4::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct FileActions {

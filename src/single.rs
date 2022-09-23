@@ -3,7 +3,7 @@ use gtk4::prelude::*;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::thread;
-use std::boxed;
+
 use std::thread::JoinHandle;
 use std::time::SystemTime;
 use glib::signal::SignalHandlerId;
@@ -14,7 +14,7 @@ use super::{OpenDialog, SaveDialog};
 use crate::FileActions;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 
 #[derive(Clone, Copy)]
 pub enum FileState {
@@ -216,7 +216,7 @@ impl SingleArchiver {
             let on_close_confirm = on_close_confirm.clone();
             let on_window_close = on_window_close.clone();
             let on_file_changed = on_file_changed.clone();
-            let on_open_request = on_open_request.clone();
+            let _on_open_request = on_open_request.clone();
             let on_save = on_save.clone();
             let on_show_open = on_show_open.clone();
             let on_error = on_error.clone();
@@ -409,7 +409,8 @@ pub fn spawn_open_file(path : String, send : glib::Sender<SingleArchiverAction>)
     thread::spawn(move || {
     
         if !Path::new(&path[..]).is_absolute() {
-            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")));
+            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
         
@@ -449,12 +450,14 @@ pub fn spawn_save_file(
     thread::spawn(move || {
 
         if !Path::new(&path[..]).is_absolute() {
-            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")));
+            send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
         
         if Path::new(&path[..]).is_dir() {
-            send.send(SingleArchiverAction::SaveError(String::from("Tried to save file to directory path")));
+            send.send(SingleArchiverAction::SaveError(String::from("Tried to save file to directory path")))
+                .unwrap_or_else(super::log_err);
             return false;
         }
 
@@ -462,17 +465,20 @@ pub fn spawn_save_file(
             Ok(mut f) => {
                 match f.write_all(content.as_bytes()) {
                     Ok(_) => {
-                        send.send(SingleArchiverAction::SaveSuccess(path));
+                        send.send(SingleArchiverAction::SaveSuccess(path))
+                            .unwrap_or_else(super::log_err);
                         true
                     },
                     Err(e) => {
-                        send.send(SingleArchiverAction::SaveError(format!("{}",e )));
+                        send.send(SingleArchiverAction::SaveError(format!("{}",e )))
+                            .unwrap_or_else(super::log_err);
                         false
                     }
                 }
             }
             Err(e) => {
-                send.send(SingleArchiverAction::SaveError(format!("{}",e )));
+                send.send(SingleArchiverAction::SaveError(format!("{}",e )))
+                    .unwrap_or_else(super::log_err);
                 false
             }
         }
@@ -514,13 +520,13 @@ pub fn connect_manager_with_editor(
 ) -> SignalHandlerId {
     ignore_file_save_action.connect_activate({
         let send = send.clone();
-        move |_action, param| {
+        move |_action, _param| {
             send.send(SingleArchiverAction::FileCloseRequest).unwrap();
         }
     });
     view.buffer().connect_changed({
         let send = send.clone();
-        move |buf| {
+        move |_buf| {
             // println!("Buffer changed to {}", buf.text(&buf.start_iter(), &buf.end_iter(), false));
             send.send(SingleArchiverAction::FileChanged).unwrap();
         }
@@ -599,14 +605,16 @@ pub fn connect_manager_with_file_actions(
     actions.save.connect_activate({
         let send = send.clone();
         move |_,_| {
-            send.send(SingleArchiverAction::SaveRequest(None));
+            send.send(SingleArchiverAction::SaveRequest(None))
+                .unwrap_or_else(super::log_err);
         }
     });
-    let open_dialog = open_dialog.clone();
+    let _open_dialog = open_dialog.clone();
     actions.open.connect_activate({
         let send = send.clone();
         move |_,_| {
-            send.send(SingleArchiverAction::RequestShowOpen);
+            send.send(SingleArchiverAction::RequestShowOpen)
+                .unwrap_or_else(super::log_err);
         }
     });
 }
@@ -622,7 +630,7 @@ where
     manager.connect_opened({
         let view = view.clone();
         let change_handler = buf_change_handler.clone();
-        move |(path, content)| {
+        move |(_path, content)| {
             println!("Text set");
             let handler_guard = change_handler.borrow();
             let change_handler = handler_guard.as_ref().unwrap();
