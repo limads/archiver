@@ -452,6 +452,11 @@ pub fn spawn_save_file(
             send.send(SingleArchiverAction::SaveError(String::from("Using non-absolute path")));
             return false;
         }
+        
+        if Path::new(&path[..]).is_dir() {
+            send.send(SingleArchiverAction::SaveError(String::from("Tried to save file to directory path")));
+            return false;
+        }
 
         match File::create(&path) {
             Ok(mut f) => {

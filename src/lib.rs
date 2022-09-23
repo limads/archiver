@@ -12,6 +12,8 @@ archiver interface. The other options would be for the new type to be a Specific
 details public) or keep the field private and re-implement the methods, which is more error-prone).
 */
 
+// TODO make sure paths to be saved, if they exist, never overwrite folders.
+
 // TODO do nothing when the opened path is already the currently-opened file.
 
 mod multi;
