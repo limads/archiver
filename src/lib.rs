@@ -38,6 +38,10 @@ pub use datadir::*;
 
 mod config;
 
+mod icons;
+
+pub use icons::*;
+
 pub use config::*;
 
 pub fn log_err<E : std::error::Error>(err : E) {

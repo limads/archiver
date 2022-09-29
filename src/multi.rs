@@ -1,42 +1,38 @@
-
 use std::thread;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path};
-// use notify::{self, Watcher};
-
-
 use std::thread::JoinHandle;
 use serde::{Serialize, Deserialize};
 use chrono::prelude::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::convert::AsRef;
+// use std::convert::AsRef;
 use gtk4::glib;
-use stateful::{Callbacks, ValuedCallbacks};
+use stateful::{Callbacks, ValuedCallbacks, Inherit};
 
-pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
+pub trait MultiArchiverImpl : Inherit<Parent = MultiArchiver> {
 
     fn final_state(&self) -> Rc<RefCell<FinalState>> {
-        self.as_ref().final_state.clone()
+        self.parent().final_state.clone()
     }
 
     fn add_files(&self, files : &[OpenedFile]) {
         for f in files.iter() {
-            self.as_ref().send.send(MultiArchiverAction::Add(f.clone()))
+            self.parent().send.send(MultiArchiverAction::Add(f.clone()))
                 .unwrap_or_else(super::log_err);
         }
     }
 
     fn sender(&self) -> &glib::Sender<MultiArchiverAction> {
-        &self.as_ref().send
+        &self.parent().send
     }
 
     fn connect_new<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_new.bind(f);
+        self.parent().on_new.bind(f);
     }
 
     // When the user requested to open a file that was already opened. Gives
@@ -46,98 +42,98 @@ pub trait MultiArchiverImpl : AsRef<MultiArchiver> {
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_reopen.bind(f);
+        self.parent().on_reopen.bind(f);
     }
 
     fn connect_added<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_added.bind(f);
+        self.parent().on_added.bind(f);
     }
 
     fn connect_selected<F>(&self, f : F)
     where
         F : Fn(Option<OpenedFile>) + 'static
     {
-        self.as_ref().on_selected.bind(f);
+        self.parent().on_selected.bind(f);
     }
 
     fn connect_opened<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_open.bind(f);
+        self.parent().on_open.bind(f);
     }
 
     fn connect_closed<F>(&self, f : F)
     where
         F : Fn((OpenedFile, usize)) + 'static
     {
-        self.as_ref().on_file_closed.bind(f);
+        self.parent().on_file_closed.bind(f);
     }
 
     fn connect_close_confirm<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_close_confirm.bind(f);
+        self.parent().on_close_confirm.bind(f);
     }
 
     fn connect_file_changed<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_file_changed.bind(f);
+        self.parent().on_file_changed.bind(f);
     }
 
     fn connect_file_persisted<F>(&self, f : F)
     where
         F : Fn(OpenedFile) + 'static
     {
-        self.as_ref().on_file_persisted.bind(f);
+        self.parent().on_file_persisted.bind(f);
     }
 
     fn connect_error<F>(&self, f : F)
     where
         F : Fn(String) + 'static
     {
-        self.as_ref().on_error.bind(f);
+        self.parent().on_error.bind(f);
     }
 
     fn connect_on_active_text_changed<F>(&self, f : F)
     where
         F : Fn(Option<String>) + 'static
     {
-        self.as_ref().on_active_text_changed.bind(f);
+        self.parent().on_active_text_changed.bind(f);
     }
 
     fn connect_window_close<F>(&self, f : F)
     where
         F : Fn(()) + 'static
     {
-        self.as_ref().on_window_close.bind(f);
+        self.parent().on_window_close.bind(f);
     }
 
     fn connect_save_unknown_path<F>(&self, f : F)
     where
         F : Fn(String) + 'static
     {
-        self.as_ref().on_save_unknown_path.bind(f);
+        self.parent().on_save_unknown_path.bind(f);
     }
 
     fn connect_buffer_read_request<F>(&self, f : F)
     where
         F : Fn(usize)->String + 'static
     {
-        self.as_ref().on_buffer_read_request.bind(f);
+        self.parent().on_buffer_read_request.bind(f);
     }
 
     fn connect_name_changed<F>(&self, f : F)
     where
         F : Fn((usize, String)) + 'static
     {
-        self.as_ref().on_name_changed.bind(f);
+        self.parent().on_name_changed.bind(f);
     }
 
 }
@@ -152,6 +148,8 @@ pub struct FinalState {
 pub enum MultiArchiverAction {
 
     OpenRequest(String),
+    
+    OpenRelativeRequest(String),
     
     SetPrefix(Option<String>),
 
@@ -348,6 +346,16 @@ impl MultiArchiver {
                     MultiArchiverAction::Add(file) => {
                         recent_files.push(file.clone());
                         on_added.call(file);
+                    },
+                    MultiArchiverAction::OpenRelativeRequest(rel_path) => {
+                        if let Some(pr) = &prefix {
+                            // TODO this will break if file path is wrt workspace, since diagnostic
+                            // messages are relative to whole workspace.
+                            let abs = Path::new(pr).to_path_buf().join(rel_path);
+                            send.send(MultiArchiverAction::OpenRequest(abs.display().to_string())).unwrap();                            
+                        } else {
+                            send.send(MultiArchiverAction::OpenError(format!("No path prefix set"))).unwrap();
+                        }
                     },
                     MultiArchiverAction::OpenRequest(path) => {
 
