@@ -48,7 +48,7 @@ pub fn load_icons_as_pixbufs_from_paths(icons : &[&'static str]) -> Result<HashM
     }
 }
 
-fn read_resource() -> gio::Resource {
+pub fn read_resource() -> gio::Resource {
     gio::Resource::load("data/resources.gresource").unwrap()
 }
 
