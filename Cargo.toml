@@ -1,7 +1,9 @@
 [package]
-name = "archiver"
+name = "filecase"
 version = "0.1.0"
 edition = "2021"
+description = "A set of file management utilities based on the stateful crate"
+license = "MIT"
 
 [dependencies]
 stateful = "0.1"

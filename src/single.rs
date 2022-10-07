@@ -1,9 +1,13 @@
+/*Copyright (c) 2022 Diego da Silva Lima. All rights reserved.
+
+This work is licensed under the terms of the MIT license.  
+For a copy, see <https://opensource.org/licenses/MIT>.*/
+
 use gtk4::*;
 use gtk4::prelude::*;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::thread;
-
 use std::thread::JoinHandle;
 use std::time::SystemTime;
 use glib::signal::SignalHandlerId;
@@ -234,7 +238,6 @@ impl SingleArchiver {
             let mut ix = 0;
             move |action| {
 
-                println!("{}: {:?}", ix, action);
                 ix += 1;
 
                 match action {
@@ -252,7 +255,6 @@ impl SingleArchiver {
                         } else {
                             curr_file.reset();
                             on_new.call(());
-                            println!("Just opened set to true");
                         }
                     },
                     SingleArchiverAction::SaveRequest(opt_path) => {
@@ -281,13 +283,11 @@ impl SingleArchiver {
                     // just_opened is false.
                     SingleArchiverAction::FileChanged => {
 
-                        // println!("File changed");
 
                         // Use this decision branch to inhibit buffer changes
                         // when a new file is opened.
                         if curr_file.just_opened {
                             curr_file.just_opened = false;
-                            // println!("(File changed) Just opened set to false");
                         }
 
                         if curr_file.last_saved.is_some() {
@@ -295,9 +295,6 @@ impl SingleArchiver {
                             on_file_changed.call(curr_file.path.clone());
                         }
 
-                        //else {
-                        // println!("File changed by key press");
-                        //}
                     },
                     SingleArchiverAction::SaveSuccess(path) => {
                         curr_file.path = Some(path.clone());
@@ -305,7 +302,6 @@ impl SingleArchiver {
                         on_save.call(path.clone());
                     },
                     SingleArchiverAction::SaveError(msg) => {
-                        println!("{}", msg);
                         on_error.call(msg.clone());
                     },
                     SingleArchiverAction::RequestShowOpen => {
@@ -338,18 +334,15 @@ impl SingleArchiver {
 
                         // It is critical that just_opened is set to true before calling the on_open,
                         // because we must ignore the change to the sourceview buffer.
-                        println!("Just opened set to true");
                         curr_file.just_opened = true;
                         curr_file.path = Some(path.clone());
                         curr_file.last_saved = Some(SystemTime::now());
 
                         on_open.call((path.clone(), content.clone()));
 
-                        // println!("Just opened set to true");
                     },
 
                     SingleArchiverAction::OpenError(e) => {
-                        println!("{}", e);
                         on_error.call(e.clone());
                     },
 
@@ -420,13 +413,13 @@ pub fn spawn_open_file(path : String, send : glib::Sender<SingleArchiverAction>)
                 match f.read_to_string(&mut content) {
                     Ok(_) => {
                         if let Err(e) = send.send(SingleArchiverAction::OpenSuccess(path.to_string(), content)) {
-                            println!("{}", e);
+                            eprintln!("{}", e);
                         }
                         true
                     },
                     Err(e) => {
                         if let Err(e) = send.send(SingleArchiverAction::OpenError(format!("{}", e ))) {
-                            println!("{}", e);
+                            eprintln!("{}", e);
                         }
                         false
                     }
@@ -434,7 +427,7 @@ pub fn spawn_open_file(path : String, send : glib::Sender<SingleArchiverAction>)
             },
             Err(e) => {
                 if let Err(e) = send.send(SingleArchiverAction::OpenError(format!("{}", e ))) {
-                    println!("{}", e);
+                    eprintln!("{}", e);
                 }
                 false
             }
@@ -527,7 +520,6 @@ pub fn connect_manager_with_editor(
     view.buffer().connect_changed({
         let send = send.clone();
         move |_buf| {
-            // println!("Buffer changed to {}", buf.text(&buf.start_iter(), &buf.end_iter(), false));
             send.send(SingleArchiverAction::FileChanged).unwrap();
         }
     })
@@ -631,7 +623,6 @@ where
         let view = view.clone();
         let change_handler = buf_change_handler.clone();
         move |(_path, content)| {
-            println!("Text set");
             let handler_guard = change_handler.borrow();
             let change_handler = handler_guard.as_ref().unwrap();
             view.buffer().block_signal(&change_handler);

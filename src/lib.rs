@@ -1,3 +1,8 @@
+/*Copyright (c) 2022 Diego da Silva Lima. All rights reserved.
+
+This work is licensed under the terms of the MIT license.  
+For a copy, see <https://opensource.org/licenses/MIT>.*/
+
 /*
 The multi and single archivers are stateful objects that keep track of opened
 files matching what the user opens it its UI. Since The actual React<.> implementations

@@ -1,3 +1,8 @@
+/*Copyright (c) 2022 Diego da Silva Lima. All rights reserved.
+
+This work is licensed under the terms of the MIT license.  
+For a copy, see <https://opensource.org/licenses/MIT>.*/
+
 use std::thread;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -7,7 +12,6 @@ use serde::{Serialize, Deserialize};
 use chrono::prelude::*;
 use std::rc::Rc;
 use std::cell::RefCell;
-// use std::convert::AsRef;
 use gtk4::glib;
 use stateful::{Callbacks, ValuedCallbacks, Inherit};
 
@@ -314,10 +318,6 @@ impl MultiArchiver {
 
             move |action| {
 
-                // println!("{:?}", action);
-                // println!("{:?}", files);
-
-                // println!("Current files = {:?}", files);
                 match action {
 
                     // When user clicks "new file"
@@ -366,7 +366,6 @@ impl MultiArchiver {
                             }
                         }
                         
-                        println!("{:?}", files);
                         if let Some(already_opened) = files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ) {
 
                             // send.send(MultiArchiverAction::OpenError(format!("File already opened"))).unwrap();
@@ -403,7 +402,6 @@ impl MultiArchiver {
                             last_closed_file = Some(closed_file.clone());
                             let n = files.len();
                             on_file_closed.call((closed_file, n));
-                            // println!("File closed");
                             if win_close_request {
                                 on_window_close.call(());
                                 win_close_request = false;
@@ -478,8 +476,6 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::SetSaved(ix, saved) => {
 
-                        // println!("Setting {} to saved status = {}", ix, saved);
-
                         // SetSaved will be called when a buffer is cleared after a file is closed,
                         // so we just ignore the call in this case, since the file won't be at the
                         // buffer anymore (impl React<QueriesEditor> for MultiArchiver).
@@ -500,7 +496,6 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::OpenSuccess(file) => {
                         files.push(file.clone());
-                        // println!("Files after opening = {:?}", files);
                         on_open.call(file.clone());
                         send.send(MultiArchiverAction::SetSaved(file.index, true))
                             .unwrap_or_else(super::log_err);
