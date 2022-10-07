@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-stateful = { git = "https://github.com/limads/stateful.git" }
+stateful = "0.1"
 gtk4 = "0.4"
 chrono = "0.4.19"
 notify = "4.0.17"
