@@ -393,6 +393,11 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::CloseRequest(ix, force) => {
 
+                        if ix >= files.len() {
+                            eprintln!("Invalid file index at close request: {}", ix);
+                            return glib::source::Continue(true);
+                        }
+                        
                         // This force=true branch will be hit by a request from the toast button
                         // clicked when the user wants to ignore an unsaved file. If win_close_request=true,
                         // the action originated from a application window close. If win_close_request=false,
@@ -460,6 +465,12 @@ impl MultiArchiver {
                         }
                     },
                     MultiArchiverAction::SaveSuccess(ix, path) => {
+                    
+                        if ix >= files.len() {
+                            eprintln!("Invalid file index after save success: {}", ix);
+                            return glib::source::Continue(true);
+                        }
+                        
                         if files[ix].name.starts_with("Untitled") {
                             files[ix].name = path.clone();
                             files[ix].path = Some(path.clone());
@@ -477,6 +488,11 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::SetSaved(ix, saved) => {
 
+                        if ix >= files.len() {
+                            eprintln!("Invalid file index at set saved: {}", ix);
+                            return glib::source::Continue(true);
+                        }
+                        
                         // SetSaved will be called when a buffer is cleared after a file is closed,
                         // so we just ignore the call in this case, since the file won't be at the
                         // buffer anymore (impl React<QueriesEditor> for MultiArchiver).
@@ -489,6 +505,10 @@ impl MultiArchiver {
                             files[ix].saved = true;
                             on_file_persisted.call(files[ix].clone());
                         } else {
+                        
+                            // TODO thread 'main' panicked at 'index out of bounds: the len is 1 
+                            // but the index is 1', /home/diego/.cargo/registry/src/github.com-1ecc6299db9ec823/filecase-0.1.1/src/multi.rs:492:32
+
                             if files[ix].saved {
                                 files[ix].saved = false;
                                 on_file_changed.call(files[ix].clone());
@@ -512,6 +532,14 @@ impl MultiArchiver {
                         prefix = opt_path;
                     },
                     MultiArchiverAction::Select(opt_ix) => {
+                        
+                        if let Some(ix) = opt_ix {
+                            if ix >= files.len() {
+                                eprintln!("Invalid file index at selection: {}", ix);
+                                return glib::source::Continue(true);
+                            }
+                        }
+                        
                         selected = opt_ix;
                         on_selected.call(opt_ix.map(|ix| files[ix].clone() ));
                     },
@@ -523,9 +551,7 @@ impl MultiArchiver {
                             on_window_close.call(());
                         }
                         final_state.replace(FinalState { recent : recent_files.clone(), files : files.clone() });
-                    },
-                    // MultiArchiverAction::CloseConfirm(_) | MultiArchiverAction::Opened(_) | MultiArchiverAction::Closed(_) => {
-                    //}
+                    }
                 }
                 glib::source::Continue(true)
             }
@@ -555,7 +581,6 @@ impl MultiArchiver {
         });*/
         Self {
             on_open,
-            // on_save,
             on_new,
             send,
             on_selected,
