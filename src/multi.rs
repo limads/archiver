@@ -9,11 +9,12 @@ use std::io::{Read, Write};
 use std::path::{Path};
 use std::thread::JoinHandle;
 use serde::{Serialize, Deserialize};
-use chrono::prelude::*;
+// use chrono::prelude::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::glib;
 use stateful::{Callbacks, ValuedCallbacks, Inherit};
+use std::time::SystemTime;
 
 pub trait MultiArchiverImpl : Inherit<Parent = MultiArchiver> {
 
@@ -336,7 +337,7 @@ impl MultiArchiver {
                             saved : true,
                             content : None,
                             index : files.len(),
-                            dt : Local::now().to_string()
+                            dt : Some(SystemTime::now())
                         };
                         files.push(new_file.clone());
                         on_new.call(new_file);
@@ -687,7 +688,7 @@ fn spawn_open_file(send : glib::Sender<MultiArchiverAction>, path : String, n_fi
                     saved : true,
                     content : Some(content),
                     index : n_files,
-                    dt : Local::now().to_string()
+                    dt : Some(SystemTime::now())
                 };
                 send.send(MultiArchiverAction::OpenSuccess(new_file)).unwrap();
                 true
@@ -706,7 +707,7 @@ pub struct OpenedFile {
     pub path : Option<String>,
     pub content : Option<String>,
     pub saved : bool,
-    pub dt : String,
+    pub dt : Option<SystemTime>,
     pub index : usize
 }
 

@@ -235,10 +235,10 @@ impl SingleArchiver {
             let mut file_save_handle : Option<JoinHandle<bool>> = None;
             curr_file.reset();
 
-            let mut ix = 0;
+            // let mut ix = 0;
             move |action| {
 
-                ix += 1;
+                // ix += 1;
 
                 match action {
 

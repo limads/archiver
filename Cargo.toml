@@ -1,15 +1,16 @@
 [package]
 name = "filecase"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A set of file management utilities based on the stateful crate"
 license = "MIT"
+repository= "https://github.com/limads/filecase"
 
 [dependencies]
 stateful = "0.1"
 gtk4 = "0.4"
-chrono = "0.4.19"
-notify = "4.0.17"
+# chrono = { version="0.4.19", default-features=false }
+# notify = "4.0.17"
 serde = { version="1.0.130", features=["derive"] }
 sourceview5 = { version = "0.4" }
 serde_json = "1.0.68"
