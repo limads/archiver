@@ -9,7 +9,6 @@ use std::io::{Read, Write};
 use std::path::{Path};
 use std::thread::JoinHandle;
 use serde::{Serialize, Deserialize};
-// use chrono::prelude::*;
 use std::rc::Rc;
 use std::cell::RefCell;
 use gtk4::glib;
@@ -242,6 +241,8 @@ pub struct MultiArchiver {
 // Limiting the file size prevents the application from freezing.
 const MAX_FILE_SIZE : usize = 5_000_000;
 
+const MAX_NUM_FILES : usize = 16;
+
 impl MultiArchiver {
 
     pub fn final_state(&self) -> FinalState {
@@ -323,7 +324,7 @@ impl MultiArchiver {
 
                     // When user clicks "new file"
                     MultiArchiverAction::NewRequest => {
-                        if files.len() == 16 {
+                        if files.len() == MAX_NUM_FILES {
                             send.send(MultiArchiverAction::OpenError(format!("Maximum number of files opened"))).unwrap();
                             return glib::source::Continue(true);
                         }
@@ -349,6 +350,7 @@ impl MultiArchiver {
                         on_added.call(file);
                     },
                     MultiArchiverAction::OpenRelativeRequest(rel_path) => {
+                    
                         if let Some(pr) = &prefix {
                             // TODO this will break if file path is wrt workspace, since diagnostic
                             // messages are relative to whole workspace.
@@ -374,7 +376,7 @@ impl MultiArchiver {
                             return glib::source::Continue(true);
                         }
 
-                        if files.len() == 16 {
+                        if files.len() == MAX_NUM_FILES {
                             send.send(MultiArchiverAction::OpenError(format!("File list limit reached"))).unwrap();
                             return glib::source::Continue(true);
                         }
@@ -403,7 +405,7 @@ impl MultiArchiver {
                         // the action originated from a application window close. If win_close_request=false,
                         // the action originated from a file list item close.
                         if force {
-                            let closed_file = remove_file(&mut files, ix);
+                            let closed_file = remove_file(&mut files, ix, &mut selected);
                             assert!(closed_file.index == ix);
                             last_closed_file = Some(closed_file.clone());
                             let n = files.len();
@@ -414,7 +416,7 @@ impl MultiArchiver {
                             }
                         } else {
                             if files[ix].saved {
-                                let closed_file = remove_file(&mut files, ix);
+                                let closed_file = remove_file(&mut files, ix, &mut selected);
                                 assert!(closed_file.index == ix);
                                 last_closed_file = Some(closed_file.clone());
                                 let n = files.len();
@@ -427,12 +429,27 @@ impl MultiArchiver {
                     },
                     MultiArchiverAction::SaveRequest(opt_path) => {
                         if let Some(ix) = selected {
+                        
+                            if ix >= files.len() {
+                                eprintln!("Invalid file index after save success: {}", ix);
+                                return glib::source::Continue(true);
+                            }
+                        
                             if let Some(path) = opt_path {
                             
                                 if let Some(pr) = &prefix {
                                     if !path.starts_with(pr) {
                                         send.send(MultiArchiverAction::OpenError(format!("Cannot save file outside prefix {}", pr))).unwrap();
                                         return glib::source::Continue(true);
+                                    }
+                                }
+                                
+                                for (i, f) in files.iter().enumerate() {
+                                    if let Some(other_path) = &f.path {
+                                        if ix != i && &other_path[..] == &path[..] {
+                                            send.send(MultiArchiverAction::OpenError(format!("Cannot save file to a path that is already opened"))).unwrap();
+                                            return glib::source::Continue(true);
+                                        }
                                     }
                                 }
                                 
@@ -461,7 +478,7 @@ impl MultiArchiver {
                                 }
                             }
                         } else {
-                            panic!("No file selected");
+                            eprintln!("No file selected to be saved");
                         }
                     },
                     MultiArchiverAction::SaveSuccess(ix, path) => {
@@ -516,6 +533,9 @@ impl MultiArchiver {
                         }
                     },
                     MultiArchiverAction::OpenSuccess(file) => {
+                        if file.index != files.len() {
+                            eprintln!("Error: New file has index {}, but it should be {}", file.index, files.len());
+                        }
                         files.push(file.clone());
                         on_open.call(file.clone());
                         send.send(MultiArchiverAction::SetSaved(file.index, true))
@@ -538,6 +558,12 @@ impl MultiArchiver {
                                 eprintln!("Invalid file index at selection: {}", ix);
                                 return glib::source::Continue(true);
                             }
+                        }
+                        
+                        if let Some(ix) = opt_ix {
+                            println!("Selected {:?}", files[ix]);
+                        } else {
+                            println!("Selected none");
                         }
                         
                         selected = opt_ix;
@@ -579,6 +605,7 @@ impl MultiArchiver {
                 }
             }
         });*/
+        
         Self {
             on_open,
             on_new,
@@ -636,8 +663,15 @@ pub fn get_text(&self) -> String {
     }
 } */
 
-fn remove_file(files : &mut Vec<OpenedFile>, ix : usize) -> OpenedFile {
+fn remove_file(files : &mut Vec<OpenedFile>, ix : usize, selected : &mut Option<usize>) -> OpenedFile {
     files[(ix+1)..].iter_mut().for_each(|f| f.index -= 1 );
+    if let Some(sel) = selected.as_mut() {
+        if *sel >= ix+1 {
+            *sel -= 1;
+        } else if *sel == ix {
+            *selected = None;
+        }
+    }
     files.remove(ix)
 }
 
