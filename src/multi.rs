@@ -164,12 +164,8 @@ pub enum MultiArchiverAction {
 
     OpenError(String),
 
-    // OpenFailure(String),
-
     // File position and whether the request is "forced" (i.e. asks for user confirmation).
     CloseRequest(usize, bool),
-
-    // CloseConfirm(usize),
 
     SaveRequest(Option<String>),
 
@@ -177,13 +173,7 @@ pub enum MultiArchiverAction {
 
     SaveError(String),
 
-    // Opened(String),
-
-    // Closed(String),
-
     NewRequest,
-
-    // ActiveTextChanged(Option<String>),
 
     WindowCloseRequest,
 
@@ -202,8 +192,6 @@ pub struct MultiArchiver {
     on_open : Callbacks<OpenedFile>,
 
     on_error : Callbacks<String>,
-
-    // on_save : Callbacks<OpenedFile>,
 
     on_reopen : Callbacks<OpenedFile>,
 
@@ -258,7 +246,6 @@ impl MultiArchiver {
         let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::PRIORITY_DEFAULT);
         let on_open : Callbacks<OpenedFile> = Default::default();
         let on_new : Callbacks<OpenedFile> = Default::default();
-        // let on_save : Callbacks<OpenedFile> = Default::default();
         let on_file_changed : Callbacks<OpenedFile> = Default::default();
         let on_file_persisted : Callbacks<OpenedFile> = Default::default();
         let on_reopen : Callbacks<OpenedFile> = Default::default();
@@ -287,10 +274,9 @@ impl MultiArchiver {
         let mut win_close_request = false;
         recv.attach(None, {
             let send = send.clone();
-            let (on_open, on_new, /*_on_save,*/ on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted, on_reopen) = (
+            let (on_open, on_new, on_selected, on_file_closed, on_close_confirm, on_file_changed, on_file_persisted, on_reopen) = (
                 on_open.clone(),
                 on_new.clone(),
-                // on_save.clone(),
                 on_selected.clone(),
                 on_file_closed.clone(),
                 on_close_confirm.clone(),
@@ -352,8 +338,6 @@ impl MultiArchiver {
                     MultiArchiverAction::OpenRelativeRequest(rel_path) => {
                     
                         if let Some(pr) = &prefix {
-                            // TODO this will break if file path is wrt workspace, since diagnostic
-                            // messages are relative to whole workspace.
                             let abs = Path::new(pr).to_path_buf().join(rel_path);
                             send.send(MultiArchiverAction::OpenRequest(abs.display().to_string())).unwrap();                            
                         } else {
@@ -370,8 +354,6 @@ impl MultiArchiver {
                         }
                         
                         if let Some(already_opened) = files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ) {
-
-                            // send.send(MultiArchiverAction::OpenError(format!("File already opened"))).unwrap();
                             on_reopen.call(already_opened.clone());
                             return glib::source::Continue(true);
                         }
@@ -412,7 +394,6 @@ impl MultiArchiver {
                             on_file_closed.call((closed_file, n));
                             if win_close_request {
                                 on_window_close.call(());
-                                win_close_request = false;
                             }
                         } else {
                             if files[ix].saved {
@@ -425,6 +406,7 @@ impl MultiArchiver {
                                 on_close_confirm.call(files[ix].clone());
                             }
                         }
+                        win_close_request = false;
                         final_state.replace(FinalState { recent : recent_files.clone(), files : files.clone() });
                     },
                     MultiArchiverAction::SaveRequest(opt_path) => {
@@ -523,9 +505,6 @@ impl MultiArchiver {
                             on_file_persisted.call(files[ix].clone());
                         } else {
                         
-                            // TODO thread 'main' panicked at 'index out of bounds: the len is 1 
-                            // but the index is 1', /home/diego/.cargo/registry/src/github.com-1ecc6299db9ec823/filecase-0.1.1/src/multi.rs:492:32
-
                             if files[ix].saved {
                                 files[ix].saved = false;
                                 on_file_changed.call(files[ix].clone());
@@ -560,12 +539,6 @@ impl MultiArchiver {
                             }
                         }
                         
-                        if let Some(ix) = opt_ix {
-                            println!("Selected {:?}", files[ix]);
-                        } else {
-                            println!("Selected none");
-                        }
-                        
                         selected = opt_ix;
                         on_selected.call(opt_ix.map(|ix| files[ix].clone() ));
                     },
@@ -583,29 +556,6 @@ impl MultiArchiver {
             }
         });
 
-        // File change watch thread
-        /*let (tx, rx) = channel();
-        let mut watcher = notify::watcher(tx, Duration::from_secs(5)).unwrap();
-        thread::spawn({
-            let sender = sender.clone();
-            move|| {
-                loop {
-                    match rx.recv() {
-                        Ok(event) => {
-                            /*match event.op {
-                                Ok(notify::op::Op::WRITE)
-                                Ok(notify::op::Op::CREATE)
-                                Ok(notify::op::Op::RENAME)
-                                Ok(notify::op::Op::CHMOD)
-                                Ok(notify::op::Op::REMOVE)
-                            }*/
-                        },
-                       Err(_) => { },
-                    }
-                }
-            }
-        });*/
-        
         Self {
             on_open,
             on_new,
@@ -628,40 +578,6 @@ impl MultiArchiver {
     }
 
 }
-
-// To save file...
-/*if let Some(path) = file.path {
-        if Self::save_file(&path, self.get_text()) {
-            self.file_list.mark_current_saved();
-            println!("Content written into file");
-        } else {
-            println!("Unable to save file");
-        }
-    } else {
-        self.sql_save_dialog.set_filename(&file.name);
-        self.sql_save_dialog.run();
-        self.sql_save_dialog.hide();
-    }
-}
-*/
-
-// TO open file..
-// view.get_buffer().map(|buf| buf.set_text(&content) );
-
-// To get text...
-/*
-pub fn get_text(&self) -> String {
-    if let Some(buffer) = self.view.borrow().get_buffer() {
-        let txt = buffer.get_text(
-            &buffer.get_start_iter(),
-            &buffer.get_end_iter(),
-            true
-        ).unwrap();
-        txt.to_string()
-    } else {
-        panic!("Unable to retrieve text buffer");
-    }
-} */
 
 fn remove_file(files : &mut Vec<OpenedFile>, ix : usize, selected : &mut Option<usize>) -> OpenedFile {
     files[(ix+1)..].iter_mut().for_each(|f| f.index -= 1 );
@@ -770,5 +686,25 @@ pub struct OpenedFile {
     pub index : usize
 }
 
-
-
+// File change watch thread
+/*let (tx, rx) = channel();
+let mut watcher = notify::watcher(tx, Duration::from_secs(5)).unwrap();
+thread::spawn({
+    let sender = sender.clone();
+    move|| {
+        loop {
+            match rx.recv() {
+                Ok(event) => {
+                    /*match event.op {
+                        Ok(notify::op::Op::WRITE)
+                        Ok(notify::op::Op::CREATE)
+                        Ok(notify::op::Op::RENAME)
+                        Ok(notify::op::Op::CHMOD)
+                        Ok(notify::op::Op::REMOVE)
+                    }*/
+                },
+               Err(_) => { },
+            }
+        }
+    }
+});*/
