@@ -20,9 +20,6 @@ pub fn load_icons_as_pixbufs_from_resource(res_root : &str, icons : &[&'static s
             icon_pixbufs.insert(*icon_name,pxb);
         }
         Ok(icon_pixbufs)
-        // } else {
-        //    Err(format!("No icon theme for default GDK display"))
-        // }
     } else {
         Err(format!("No default GDK display"))
     }
@@ -40,14 +37,8 @@ pub fn load_icons_as_pixbufs_from_paths(icons : &[&'static str]) -> Result<HashM
                 .ok_or(format!("File for icon {} has no valid path", icon_name))?;
                 let pxb = Pixbuf::from_file_at_scale(path, 16, 16, true).unwrap();
                 icon_pixbufs.insert(*icon_name,pxb);
-            //} else {
-            //    return Err(format!("No icon named {}", icon_name));
-            //}
         }
         Ok(icon_pixbufs)
-        // } else {
-        //    Err(format!("No icon theme for default GDK display"))
-        // }
     } else {
         Err(format!("No default GDK display"))
     }
