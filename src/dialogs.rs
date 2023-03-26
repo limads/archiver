@@ -13,7 +13,7 @@ pub struct OpenDialog {
 
 impl OpenDialog {
 
-    pub fn build(pattern : &str) -> Self {
+    pub fn build(patterns : &[&str]) -> Self {
         let dialog = FileChooserDialog::new(
             Some("Open file"),
             None::<&Window>,
@@ -31,7 +31,9 @@ impl OpenDialog {
         });
         configure_dialog(&dialog);
         let filter = FileFilter::new();
-        filter.add_pattern(pattern);
+        for pattern in patterns {
+            filter.add_pattern(pattern);
+        }
         dialog.set_filter(&filter);
         Self { dialog }
     }
@@ -52,7 +54,7 @@ pub struct SaveDialog {
 
 impl SaveDialog {
 
-    pub fn build(pattern : &str) -> Self {
+    pub fn build(patterns : &[&str]) -> Self {
         let dialog = FileChooserDialog::new(
             Some("Save file"),
             None::<&Window>,
@@ -70,7 +72,9 @@ impl SaveDialog {
         });
         configure_dialog(&dialog);
         let filter = FileFilter::new();
-        filter.add_pattern(pattern);
+        for pattern in patterns {
+            filter.add_pattern(pattern);
+        }
         dialog.set_filter(&filter);
         Self { dialog }
     }
