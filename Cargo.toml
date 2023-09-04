@@ -7,7 +7,7 @@ license = "MIT"
 repository= "https://github.com/limads/filecase"
 
 [dependencies]
-stateful = "0.1"
+stateful = { git = "https://github.com/limads/stateful.git" }
 gtk4 = "0.5.1"
 serde = { version="1.0", features=["derive"] }
 sourceview5 = { version = "0.5.0" }
