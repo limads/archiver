@@ -243,7 +243,7 @@ impl MultiArchiver {
 
     pub fn new(extension : String) -> Self {
         let final_state = Rc::new(RefCell::new(FinalState { recent : Vec::new(), files : Vec::new() }));
-        let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::PRIORITY_DEFAULT);
+        let (send, recv) = glib::MainContext::channel::<MultiArchiverAction>(glib::source::Priority::DEFAULT);
         let on_open : Callbacks<OpenedFile> = Default::default();
         let on_new : Callbacks<OpenedFile> = Default::default();
         let on_file_changed : Callbacks<OpenedFile> = Default::default();
@@ -312,7 +312,7 @@ impl MultiArchiver {
                     MultiArchiverAction::NewRequest => {
                         if files.len() == MAX_NUM_FILES {
                             send.send(MultiArchiverAction::OpenError(format!("Maximum number of files opened"))).unwrap();
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
                         let n_untitled = files.iter().filter(|f| f.name.starts_with("Untitled") )
                             .last()
@@ -349,18 +349,18 @@ impl MultiArchiver {
                         if let Some(pr) = &prefix {
                             if !path.starts_with(pr) {
                                 send.send(MultiArchiverAction::OpenError(format!("Cannot open file outside prefix {}", pr))).unwrap();
-                                return glib::source::Continue(true);
+                                return glib::ControlFlow::Continue;
                             }
                         }
                         
                         if let Some(already_opened) = files.iter().find(|f| f.path.as_ref().map(|p| &p[..] == &path[..] ).unwrap_or(false) ) {
                             on_reopen.call(already_opened.clone());
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
 
                         if files.len() == MAX_NUM_FILES {
                             send.send(MultiArchiverAction::OpenError(format!("File list limit reached"))).unwrap();
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
 
                         // We could have a problem if the user attempts to open
@@ -379,7 +379,7 @@ impl MultiArchiver {
 
                         if ix >= files.len() {
                             eprintln!("Invalid file index at close request: {}", ix);
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
                         
                         // This force=true branch will be hit by a request from the toast button
@@ -414,7 +414,7 @@ impl MultiArchiver {
                         
                             if ix >= files.len() {
                                 eprintln!("Invalid file index after save success: {}", ix);
-                                return glib::source::Continue(true);
+                                return glib::ControlFlow::Continue;
                             }
                         
                             if let Some(path) = opt_path {
@@ -422,7 +422,7 @@ impl MultiArchiver {
                                 if let Some(pr) = &prefix {
                                     if !path.starts_with(pr) {
                                         send.send(MultiArchiverAction::OpenError(format!("Cannot save file outside prefix {}", pr))).unwrap();
-                                        return glib::source::Continue(true);
+                                        return glib::ControlFlow::Continue;
                                     }
                                 }
                                 
@@ -430,7 +430,7 @@ impl MultiArchiver {
                                     if let Some(other_path) = &f.path {
                                         if ix != i && &other_path[..] == &path[..] {
                                             send.send(MultiArchiverAction::OpenError(format!("Cannot save file to a path that is already opened"))).unwrap();
-                                            return glib::source::Continue(true);
+                                            return glib::ControlFlow::Continue;
                                         }
                                     }
                                 }
@@ -446,7 +446,7 @@ impl MultiArchiver {
                                     if let Some(pr) = &prefix {
                                         if !path.starts_with(pr) {
                                             send.send(MultiArchiverAction::OpenError(format!("Cannot save file outside prefix {}", pr))).unwrap();
-                                            return glib::source::Continue(true);
+                                            return glib::ControlFlow::Continue;
                                         }
                                     }
                                     
@@ -467,7 +467,7 @@ impl MultiArchiver {
                     
                         if ix >= files.len() {
                             eprintln!("Invalid file index after save success: {}", ix);
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
                         
                         if files[ix].name.starts_with("Untitled") {
@@ -489,7 +489,7 @@ impl MultiArchiver {
 
                         if ix >= files.len() {
                             eprintln!("Invalid file index at set saved: {}", ix);
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
                         
                         // SetSaved will be called when a buffer is cleared after a file is closed,
@@ -497,7 +497,7 @@ impl MultiArchiver {
                         // buffer anymore (impl React<QueriesEditor> for MultiArchiver).
                         if last_closed_file.clone().map(|f| f.index == ix ).unwrap_or(false) {
                             last_closed_file = None;
-                            return glib::source::Continue(true);
+                            return glib::ControlFlow::Continue;
                         }
 
                         if saved {
@@ -535,7 +535,7 @@ impl MultiArchiver {
                         if let Some(ix) = opt_ix {
                             if ix >= files.len() {
                                 eprintln!("Invalid file index at selection: {}", ix);
-                                return glib::source::Continue(true);
+                                return glib::ControlFlow::Continue;
                             }
                         }
                         
@@ -552,7 +552,7 @@ impl MultiArchiver {
                         final_state.replace(FinalState { recent : recent_files.clone(), files : files.clone() });
                     }
                 }
-                glib::source::Continue(true)
+                glib::ControlFlow::Continue
             }
         });
 

@@ -199,7 +199,7 @@ impl SingleArchiver {
 
     pub fn new() -> Self {
 
-        let (send, recv) = glib::MainContext::channel::<SingleArchiverAction>(glib::PRIORITY_DEFAULT);
+        let (send, recv) = glib::MainContext::channel::<SingleArchiverAction>(glib::source::Priority::DEFAULT);
         let on_open : Callbacks<(String, String)> = Default::default();
         let on_show_open : Callbacks<()> = Default::default();
         let on_new : Callbacks<()> = Default::default();
@@ -317,7 +317,7 @@ impl SingleArchiver {
                         // User tried to open an already-opened file. Ignore the request in this case.
                         if let Some(curr_path) = &curr_file.path {
                             if &curr_path[..] == path {
-                                return Continue(true);
+                                return glib::ControlFlow::Continue;
                             }
                         }
     
@@ -375,7 +375,7 @@ impl SingleArchiver {
                         }
                     }
                 }
-                Continue(true)
+                glib::ControlFlow::Continue
             }
         });
         Self {
@@ -530,7 +530,7 @@ pub fn connect_manager_responds_window(send : &glib::Sender<SingleArchiverAction
     let send = send.clone();
     window.connect_close_request(move |_win| {
         send.send(SingleArchiverAction::WindowCloseRequest).unwrap();
-        glib::signal::Inhibit(true)
+        glib::signal::Propagation::Stop
     });
 }
 
